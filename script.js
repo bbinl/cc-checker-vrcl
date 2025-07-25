@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let liveCount = 0;
     let deadCount = 0;
     let unknownCount = 0;
+    let currentIndex = 0;
 
     checkBtn.addEventListener("click", toggleChecking);
     stopCheckBtn.addEventListener("click", stopCheckingProcess);
@@ -72,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n\n');
 
-            buffer = lines.pop(); // Keep unfinished line
+            buffer = lines.pop(); // incomplete line save
 
             for (const chunk of lines) {
                 if (chunk.startsWith('event: done')) {
@@ -91,23 +92,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     const result = JSON.parse(raw);
                     const card = result.card;
                     const status = result.status;
+                    currentIndex++;
 
-                    let displayText = '';
+                    let emoji = '🟡';
                     if (status === 'Live') {
                         liveCount++;
+                        emoji = '🟢';
                         appendResultToSpecificOutput(liveNumbersTextarea, card);
-                        displayText = '🟢 Live';
                     } else if (status === 'Dead') {
                         deadCount++;
+                        emoji = '🔴';
                         appendResultToSpecificOutput(deadNumbersTextarea, card);
-                        displayText = '🔴 Dead';
                     } else {
                         unknownCount++;
+                        emoji = '🟡';
                         appendResultToSpecificOutput(unknownNumbersTextarea, card);
-                        displayText = '🟡 Unknown';
                     }
 
-                    appendToStatusOutput(`➡️ ${card} ${displayText}`);
+                    appendToStatusOutput(`➡️ Checking card ${currentIndex} of ${cards.length}...\n${card} ${emoji} ${status}`);
                     updateSummaryCounts(liveCount, deadCount, unknownCount);
                 }
             }
