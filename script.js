@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         appendResultToSpecificOutput(unknownNumbersTextarea, card);
                     }
 
-                    appendToStatusOutput(`➡️ Checking card ${currentIndex} of ${cards.length}...\n${card} ${emoji} ${status}`);
+                    appendToStatusOutput(`➡️ Checking card ${currentIndex} of ${cards.length}... ${card} ${emoji} ${status}`);
                     updateSummaryCounts(liveCount, deadCount, unknownCount);
                 }
             }
