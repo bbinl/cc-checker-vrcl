@@ -139,12 +139,18 @@ document.addEventListener('DOMContentLoaded', () => {
     window.copyToClipboard = function (elementId) {
         const textareaElement = document.getElementById(elementId);
         if (textareaElement && textareaElement.value) {
-            navigator.clipboard.writeText(textareaElement.value).then(() => {
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = textareaElement.value;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            try {
+                document.execCommand('copy');
                 Swal.fire("Copied!", "Content copied to clipboard.", "success");
-            }).catch(err => {
+            } catch (err) {
                 console.error('Failed to copy text: ', err);
                 Swal.fire("Error", "Could not copy text.", "error");
-            });
+            }
+            document.body.removeChild(tempTextArea);
         } else {
             Swal.fire("No Content", "The section is empty.", "info");
         }
